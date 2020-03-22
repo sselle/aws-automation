@@ -1,2 +1,4 @@
 venv
 .vscode
+webotron/webotron/__pycache__/
+.gitignore
