@@ -1,6 +1,8 @@
 import boto3
 import click
 from botocore.exceptions import ClientError
+from pathlib import Path
+import mimetypes
 
 session = boto3.Session()
 s3 = session.resource('s3')
@@ -13,7 +15,7 @@ def cli():
     "Webotron deploys websites to AWS"
     pass
 
-@cli.command('list-buckets')      # this is a decorator: wraps the function
+@cli.command('list-buckets')      
 def list_buckets():
     "List all s3 buckets"           # doc string - taucht automatisch in --help auf
     for bucket in s3.buckets.all():
@@ -41,7 +43,7 @@ def create_bucket(bucket_name):
             raise e
 
     policy = policy = '''
-    {
+    {ipy
         "Version":"2012-10-17",
         "Statement":[{
         "Sid":"PublicReadGetObject",
@@ -71,6 +73,30 @@ def create_bucket(bucket_name):
     })
 
     return
+def upload_file(s3_bucket, path, key):
+    content_type = mimetypes.guess_type(key)[0] or 'text/plain'
+    
+    s3_bucket.upload_file(
+        path,
+        key,
+        ExtraArgs={
+            'ContentType': 'text/html'
+        })
+
+@cli.command('sync')
+@click.argument('pathname', type=click.Path(exists=True))
+@click.argument('bucket')
+def sync(pathname, bucket):
+    "Sync local files from PATH to s3 BUCKET"
+    s3_bucket = s3.Bucket(bucket)
+
+    root=Path(pathname).expanduser().resolve()
+    def handle_directory(target):
+        for p in target.iterdir():
+            if p.is_dir(): handle_directory(p)
+            if p.is_file(): upload_file(s3_bucket, str(p), str(p.relative_to(root)))
+    
+    handle_directory(root)
 
 def main():
     cli()

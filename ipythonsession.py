@@ -7,4 +7,6 @@ s3 = session.resource('s3')
 # get all buckets
 for bucket in s3.buckets.all():
     print(bucket)
-    
+
+# save iypthon session
+# %save filename.py 10-15
