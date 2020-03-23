@@ -5,6 +5,8 @@ from botocore.exceptions import ClientError
 from pathlib import Path
 import mimetypes
 
+import utility
+
 """Classes for S3 Buckets."""
 
 
@@ -38,6 +40,16 @@ class BucketManager:
                 raise error
 
         return s3_bucket
+
+    def get_bucket_region(self, bucket):
+        bucket_location = self.s3.meta.client.get_bucket_location(Bucket = bucket.name)
+        #bucket ins us-east-1 give location None from the AWS API
+        return bucket_location['LocationConstraint'] or 'us-east-1'
+
+    def get_bucket_url(self, bucket):
+        """Get the website URL for this bucket"""
+        return 'http://{}.{}'.format(bucket.name, 
+                                     utility.get_endpoint(self.get_bucket_region(bucket)).url)
 
     def set_public_policy(self, s3_bucket):
         """Activate public access for BUCKET."""

@@ -13,10 +13,10 @@ Webotron automates the process of deploying static web sites to AWS:
 """
 
 import boto3
-from botocore.exceptions import ClientError
 import click
 
 from bucket import BucketManager
+import utility
 
 SESSION = None
 bucket_manager = None
@@ -65,6 +65,7 @@ def create_bucket(bucket_name):
 def sync(pathname, bucket_name):
     """Sync local files from PATH to s3 BUCKET."""
     bucket_manager.sync(pathname, bucket_name)
+    print(bucket_manager.get_bucket_url(bucket_manager.s3.Bucket(bucket_name)))
 
 
 def main():
