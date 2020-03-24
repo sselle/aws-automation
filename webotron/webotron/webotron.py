@@ -67,7 +67,6 @@ def sync(pathname, bucket_name):
     bucket_manager.sync(pathname, bucket_name)
     print(bucket_manager.get_bucket_url(bucket_manager.s3.Bucket(bucket_name)))
 
-
 def main():
     cli()
 

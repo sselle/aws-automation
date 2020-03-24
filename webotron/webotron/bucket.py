@@ -1,9 +1,13 @@
 # -*- coding utf-8 -*-
 
-from botocore.exceptions import ClientError
-
 from pathlib import Path
 import mimetypes
+from pprint import pprint
+from hashlib import md5
+from functools import reduce
+
+import boto3
+from botocore.exceptions import ClientError
 
 import utility
 
@@ -12,11 +16,19 @@ import utility
 
 class BucketManager:
     """Manage S3 Bucket."""
+    # standard chunk size for file upload to S3
+    CHUNK_SIZE = 8388608
 
     def __init__(self, SESSION):
         """Create a BucketManager object."""
         self.s3 = SESSION.resource('s3')
         self.SESSION = SESSION
+        self.transfer_config = boto3.s3.transfer.TransferConfig(
+            multipart_chunksize=self.CHUNK_SIZE,
+            multipart_threshold=self.CHUNK_SIZE
+        )
+
+        self.manifest = {}
 
     def all_buckets(self):
         """Get an iterator for all buckets."""
@@ -84,21 +96,74 @@ class BucketManager:
                                                         'Suffix': 'index.html'
                                                       }})
 
+    def load_manifest(self, bucket_name):
+        """Load manifest for the ETAG."""
+        paginator = self.s3.meta.client.get_paginator('list_objects_v2')
+
+        for page in paginator.paginate(Bucket = bucket_name):
+            for obj in page.get('Contents', []):
+                self.manifest[obj['Key']] = obj['ETag']
+                pprint(obj)
+
     @staticmethod
-    def upload_file(s3_bucket, path, key):
+    def hash_data(data):
+        """Calculate the md5 checksum for data."""
+        hash = md5()
+        hash.update(data)
+
+        return hash
+
+    def gen_etag(self, pathname):
+        """ETag for local pathname"""
+        # multiple hashes for multiple chunks of the files
+        hashes = []
+        
+        with open(pathname, 'rb') as f:
+            while True:
+                data = f.read(self.CHUNK_SIZE)
+
+                if not data:
+                    break
+                
+                hashes.append(self.hash_data(data))
+            
+            # Analyze results: files larger than 5 MB will be broken down into multiple chunks
+            if not hashes:
+                return
+            
+            elif len(hashes) == 1:
+                # Double "" because this is the format of the API reply
+                return '"{}"'.format(hashes[0].hexdigest())
+            else:
+                # multiple chunks = create hash of hashes for one object
+                hash = self.hash_data(reduce(lambda x, y: x+y, (h.digest() for h in hashes)))
+                return '"{}-{}"'.format(hash.hexdigest(), len(hashes))
+
+    
+    def upload_file(self, s3_bucket, path, key):
         """Upload files to s3 bucket."""
         content_type = mimetypes.guess_type(key)[0] or 'text/plain'
 
-        s3_bucket.upload_file(
-            path,
-            key,
-            ExtraArgs={
-                'ContentType': content_type
-            })
+        etag = self.gen_etag(path)
+
+        # check if etags are the same. if not, upload the file
+        if self.manifest.get(key, '') == etag:
+            print("Skipping {}, etags match".format(key))
+            return
+        else: 
+            return s3_bucket.upload_file(
+                                        path,
+                                        key,
+                                        ExtraArgs={
+                                            'ContentType': content_type
+                                        },
+                                        Config=self.transfer_config
+                                        )
 
     def sync(self, pathname, bucket_name):
         """Sync local files from PATH to s3 BUCKET."""
         s3_bucket = self.s3.Bucket(bucket_name)
+        self.load_manifest(bucket_name)
 
         root = Path(pathname).expanduser().resolve()
 
