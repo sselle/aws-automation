@@ -9,5 +9,5 @@ Webotron currently has the following features:
 
 - List Buckets
 - List Objects in Bucket
-- Create s3 bucket and active website hosting
+- Create S3 bucket and active website hosting
 - Sync directory tree to bucket
